@@ -80,36 +80,6 @@ Les métriques calculées incluent :
 
 Voir [docs/GRID_SEARCH.md](docs/GRID_SEARCH.md) pour plus de détails.
 
-## Accélération GPU (CUDA)
-
-Le projet inclut une **version GPU-accélérée** pour des performances 10-20x supérieures :
-
-```bash
-# Vérifier si CUDA est disponible
-make check-cuda
-
-# Compiler la version GPU
-make gpu-cuda
-
-# Benchmark GPU vs CPU
-make test-gpu
-```
-
-**Gains de performance attendus** :
-- Training : **15-25x** plus rapide
-- Inference : **10-18x** plus rapide  
-- Grid Search : **4 heures → 15 minutes**
-
-La version GPU est dans `src/gpu/` avec :
-- Kernels CUDA optimisés pour convolution/pooling
-- Interface C compatible avec le code CPU
-- Benchmark automatique CPU vs GPU
-- Support des cartes NVIDIA (GTX 10xx, RTX 20xx/30xx/40xx)
-
-Voir [docs/GPU_GUIDE.md](docs/GPU_GUIDE.md) pour l'installation et l'utilisation complète.
-
-**Note** : La version CPU reste disponible et fonctionnelle. La version GPU est optionnelle et nécessite une carte NVIDIA + CUDA Toolkit.
-
 ## Dépendances
 
 - **stb_image.h / stb_image_write.h** : chargement/sauvegarde d'images (header-only, inclus)
@@ -132,8 +102,8 @@ gunzip *.gz
 
 ## Performance
 
-- **Entraînement CNN** : ~30 époques sur MNIST (CPU, ~4-8h selon machine)
-- **Précision OCR attendue** : >95% sur chiffres imprimés
+- **Entraînement CNN** : ~30 époques sur MNIST (CPU, ~30min-2h selon machine)
+- **Précision OCR attendue** : >98.3% sur chiffres manuscrits
 - **Temps résolution** : <100ms par grille Sudoku
 
 ## Licence
