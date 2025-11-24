@@ -1,0 +1,12 @@
+# Meilleurs hyperparamètres trouvés par Grid Search
+# Date: Nov 24 2025
+
+EPOCHS=20
+BATCH_SIZE=32
+LEARNING_RATE=0.0200
+MOMENTUM=0.00
+
+# Métriques obtenues
+ACCURACY=0.9848
+AVG_F1_SCORE=0.9847
+TRAINING_TIME_MIN=6.39

@@ -1,0 +1,30 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+
+# Executables
+sudoku_solver
+train_cnn
+
+# Models and data
+models/*.bin
+data/mnist/*.gz
+data/mnist/*-ubyte
+data/test_images/*.jpg
+data/test_images/*.png
+
+# Debug outputs
+debug_*.png
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
