@@ -25,6 +25,10 @@ typedef struct {
 // labels_path: fichier de labels (ex: "train-labels-idx1-ubyte")
 MNISTDataset* load_mnist_dataset(const char *images_path, const char *labels_path);
 
+// Génère des échantillons de classe 0 (vide/bruit) et les ajoute au dataset
+// count: nombre d'échantillons à générer
+void generate_empty_samples(MNISTDataset *dataset, int count);
+
 // Libère la mémoire d'un dataset
 void free_mnist_dataset(MNISTDataset *dataset);
 
@@ -38,6 +42,21 @@ void free_mnist_dataset(MNISTDataset *dataset);
 // noise_level: niveau de bruit (0.0 - 0.1)
 float* augment_image(const float *image, int width, int height, 
                      float rotation, float translation, float noise_level);
+
+// ============================================================================
+// CHARGEMENT DATASET SUPPLÉMENTAIRE (FORMAT BINAIRE SIMPLE)
+// ============================================================================
+
+/**
+ * Charge un dataset supplémentaire et l'ajoute au dataset existant
+ * Format binaire:
+ * - Magic (4 bytes): 0xDEADBEEF
+ * - Count (4 bytes)
+ * - Width (4 bytes)
+ * - Height (4 bytes)
+ * - Data: [Label (1 byte) + Pixels (W*H bytes)] * Count
+ */
+void load_extra_dataset(const char *filepath, MNISTDataset *dataset);
 
 // ============================================================================
 // BATCHING

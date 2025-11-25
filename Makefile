@@ -37,17 +37,24 @@ GRID_SEARCH_SRCS = $(COMMON_SRCS) \
 MAIN_SRCS = $(COMMON_SRCS) \
             $(SRC_DIR)/main.c
 
+# Sources pour évaluation
+EVAL_SRCS = $(COMMON_SRCS) \
+            $(SRC_DIR)/dataset_loader.c \
+            $(SRC_DIR)/evaluate_model.c
+
 # Objets
 TRAIN_OBJS = $(TRAIN_SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 GRID_SEARCH_OBJS = $(GRID_SEARCH_SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 MAIN_OBJS = $(MAIN_SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+EVAL_OBJS = $(EVAL_SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # Exécutables
 TRAIN_BIN = $(BIN_DIR)/train_cnn
 GRID_SEARCH_BIN = $(BIN_DIR)/grid_search
 MAIN_BIN = $(BIN_DIR)/sudoku_solver
+EVAL_BIN = $(BIN_DIR)/evaluate_model
 
-.PHONY: all clean train gridsearch run debug directories
+.PHONY: all clean train gridsearch run debug directories evaluate
 
 all: directories $(MAIN_BIN)
 
@@ -74,6 +81,13 @@ $(TRAIN_BIN): $(TRAIN_OBJS)
 	@echo "✓ Compilation réussie: $@"
 
 $(GRID_SEARCH_BIN): $(GRID_SEARCH_OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "✓ Compilation réussie: $@"
+
+evaluate: directories $(EVAL_BIN)
+	$(EVAL_BIN)
+
+$(EVAL_BIN): $(EVAL_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "✓ Compilation réussie: $@"
 

@@ -146,11 +146,29 @@ GrayImage* warp_perspective(const GrayImage *img, const HomographyMatrix *H,
             Point2D dst_point = {x, y};
             Point2D src_point = transform_point(&H_inv, dst_point);
             
-            int sx = (int)roundf(src_point.x);
-            int sy = (int)roundf(src_point.y);
+            float sx = src_point.x;
+            float sy = src_point.y;
             
-            if (sx >= 0 && sx < (int)img->width && sy >= 0 && sy < (int)img->height) {
-                result->data[y * output_width + x] = img->data[sy * img->width + sx];
+            // Interpolation Bilinéaire pour une meilleure qualité
+            if (sx >= 0 && sx < img->width - 1 && sy >= 0 && sy < img->height - 1) {
+                int x0 = (int)sx;
+                int y0 = (int)sy;
+                int x1 = x0 + 1;
+                int y1 = y0 + 1;
+                
+                float dx = sx - x0;
+                float dy = sy - y0;
+                
+                float v00 = img->data[y0 * img->width + x0];
+                float v10 = img->data[y0 * img->width + x1];
+                float v01 = img->data[y1 * img->width + x0];
+                float v11 = img->data[y1 * img->width + x1];
+                
+                float v0 = v00 * (1.0f - dx) + v10 * dx;
+                float v1 = v01 * (1.0f - dx) + v11 * dx;
+                float val = v0 * (1.0f - dy) + v1 * dy;
+                
+                result->data[y * output_width + x] = (uint8_t)val;
             } else {
                 result->data[y * output_width + x] = 0;  // Fond noir
             }

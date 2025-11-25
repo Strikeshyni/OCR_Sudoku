@@ -74,41 +74,139 @@ MNISTDataset* load_mnist_dataset(const char *images_path, const char *labels_pat
         return NULL;
     }
     
-    // Allouer le dataset
+    // Allouer le dataset (allocation initiale max, on réduira après)
     MNISTDataset *dataset = (MNISTDataset*)malloc(sizeof(MNISTDataset));
-    dataset->count = num_images;
     dataset->image_size = rows * cols;
     dataset->images = (float**)malloc(num_images * sizeof(float*));
     dataset->labels = (uint8_t*)malloc(num_images * sizeof(uint8_t));
     
     // Lire les images et labels
     uint8_t *pixel_buffer = (uint8_t*)malloc(rows * cols);
+    size_t valid_count = 0;
     
     for (size_t i = 0; i < num_images; i++) {
+        // Lire le label d'abord (pour savoir si on garde)
+        // Attention: dans les fichiers IDX, les images sont stockées avant ou après ?
+        // IDX images et labels sont dans des fichiers séparés.
+        // On doit lire les deux en parallèle.
+        
+        uint8_t label;
+        fread(&label, 1, 1, labels_file);
+        
         // Lire les pixels
         fread(pixel_buffer, 1, rows * cols, images_file);
         
-        // Allouer et normaliser l'image
-        dataset->images[i] = (float*)malloc(rows * cols * sizeof(float));
-        for (size_t j = 0; j < rows * cols; j++) {
-            dataset->images[i][j] = pixel_buffer[j] / 255.0f;
+        // Filtrer le 0 (MNIST 0 ressemble à un zéro, pas à une case vide)
+        if (label == 0) {
+            continue; 
         }
         
-        // Lire le label
-        fread(&dataset->labels[i], 1, 1, labels_file);
+        // Allouer et normaliser l'image
+        dataset->images[valid_count] = (float*)malloc(rows * cols * sizeof(float));
+        for (size_t j = 0; j < rows * cols; j++) {
+            dataset->images[valid_count][j] = pixel_buffer[j] / 255.0f;
+        }
+        
+        dataset->labels[valid_count] = label;
+        valid_count++;
         
         if ((i + 1) % 10000 == 0) {
-            LOG_INFO("Chargé %zu/%zu images...", i + 1, num_images);
+            LOG_INFO("  - Traité %zu images (gardé %zu)", i + 1, valid_count);
         }
     }
+    
+    // Réduire la taille des tableaux
+    dataset->count = valid_count;
+    // On pourrait realloc ici pour gagner de la place, mais c'est optionnel
     
     free(pixel_buffer);
     fclose(images_file);
     fclose(labels_file);
     
-    LOG_INFO("Dataset MNIST chargé: %zu images", dataset->count);
+    LOG_INFO("Chargement terminé. %zu images conservées (0 filtrés).", dataset->count);
+    
     return dataset;
 }
+
+// ============================================================================
+// CHARGEMENT DATASET SUPPLÉMENTAIRE
+// ============================================================================
+
+void load_extra_dataset(const char *filepath, MNISTDataset *dataset) {
+    FILE *file = fopen(filepath, "rb");
+    if (!file) {
+        LOG_INFO("Fichier de données supplémentaires non trouvé: %s (ignoré)", filepath);
+        return;
+    }
+    
+    // Lire le header
+    uint32_t magic = read_big_endian_int(file);
+    if (magic != 0xDEADBEEF) {
+        LOG_ERROR("Magic number invalide pour %s: 0x%X (attendu 0xDEADBEEF)", filepath, magic);
+        fclose(file);
+        return;
+    }
+    
+    uint32_t count = read_big_endian_int(file);
+    uint32_t width = read_big_endian_int(file);
+    uint32_t height = read_big_endian_int(file);
+    
+    if (width * height != dataset->image_size) {
+        LOG_ERROR("Dimensions incompatibles: %ux%u vs %zu (taille attendue)", 
+                  width, height, dataset->image_size);
+        fclose(file);
+        return;
+    }
+    
+    LOG_INFO("Chargement de %u images supplémentaires depuis %s...", count, filepath);
+    
+    // Réallouer la mémoire (estimation max)
+    size_t max_new_count = dataset->count + count;
+    float **new_images = (float**)realloc(dataset->images, max_new_count * sizeof(float*));
+    uint8_t *new_labels = (uint8_t*)realloc(dataset->labels, max_new_count * sizeof(uint8_t));
+    
+    if (!new_images || !new_labels) {
+        LOG_ERROR("Échec de la réallocation mémoire");
+        fclose(file);
+        return;
+    }
+    
+    dataset->images = new_images;
+    dataset->labels = new_labels;
+    
+    // Lire les données
+    uint8_t *pixel_buffer = (uint8_t*)malloc(width * height);
+    size_t added_count = 0;
+    
+    for (size_t i = 0; i < count; i++) {
+        uint8_t label;
+        fread(&label, 1, 1, file);
+        fread(pixel_buffer, 1, width * height, file);
+        
+        if (label == 0) continue; // Filtrer les 0
+        
+        size_t idx = dataset->count + added_count;
+        dataset->labels[idx] = label;
+        
+        // Allouer et normaliser
+        dataset->images[idx] = (float*)malloc(width * height * sizeof(float));
+        for (size_t j = 0; j < width * height; j++) {
+            dataset->images[idx][j] = pixel_buffer[j] / 255.0f;
+        }
+        added_count++;
+    }
+    
+    free(pixel_buffer);
+    dataset->count += added_count;
+    
+    LOG_INFO("Ajouté %zu images (filtré %zu zéros). Total: %zu images.", 
+             added_count, count - added_count, dataset->count);
+    fclose(file);
+}
+
+// ============================================================================
+// LIBÉRATION MÉMOIRE
+// ============================================================================
 
 void free_mnist_dataset(MNISTDataset *dataset) {
     if (!dataset) return;
@@ -215,4 +313,63 @@ void shuffle_dataset(MNISTDataset *dataset) {
         dataset->labels[i] = dataset->labels[j];
         dataset->labels[j] = temp_label;
     }
+}
+
+// ============================================================================
+// GÉNÉRATION DE CLASSE VIDE (0)
+// ============================================================================
+
+void generate_empty_samples(MNISTDataset *dataset, int count) {
+    LOG_INFO("Génération de %d échantillons 'vides' (classe 0)...", count);
+    
+    size_t new_count = dataset->count + count;
+    float **new_images = (float**)realloc(dataset->images, new_count * sizeof(float*));
+    uint8_t *new_labels = (uint8_t*)realloc(dataset->labels, new_count * sizeof(uint8_t));
+    
+    if (!new_images || !new_labels) {
+        LOG_ERROR("Échec réallocation pour empty samples");
+        return;
+    }
+    
+    dataset->images = new_images;
+    dataset->labels = new_labels;
+    
+    for (int i = 0; i < count; i++) {
+        size_t idx = dataset->count + i;
+        dataset->labels[idx] = 0;
+        dataset->images[idx] = (float*)malloc(dataset->image_size * sizeof(float));
+        
+        // Type de bruit
+        float type = randf(0.0f, 1.0f);
+        
+        if (type < 0.7f) {
+            // Cas 1: Presque noir (bruit très faible) - Cas le plus fréquent après seuillage
+            for (size_t j = 0; j < dataset->image_size; j++) {
+                dataset->images[idx][j] = randf(0.0f, 0.05f); 
+            }
+        } else if (type < 0.9f) {
+            // Cas 2: Bruit uniforme un peu plus fort
+            for (size_t j = 0; j < dataset->image_size; j++) {
+                dataset->images[idx][j] = randf(0.0f, 0.15f);
+            }
+        } else {
+            // Cas 3: Quelques artefacts (simulant des restes de bordures ou taches)
+            for (size_t j = 0; j < dataset->image_size; j++) {
+                dataset->images[idx][j] = randf(0.0f, 0.05f); // Fond noir
+            }
+            
+            // Ajouter 1 à 3 "taches" ou lignes
+            int num_spots = (int)randf(1, 4);
+            for(int k=0; k<num_spots; k++) {
+                int center = (int)randf(0, dataset->image_size);
+                // Petit blob
+                dataset->images[idx][center] = randf(0.5f, 1.0f);
+                if (center + 1 < (int)dataset->image_size) dataset->images[idx][center+1] = randf(0.3f, 0.8f);
+                if (center - 1 >= 0) dataset->images[idx][center-1] = randf(0.3f, 0.8f);
+            }
+        }
+    }
+    
+    dataset->count = new_count;
+    LOG_INFO("Ajouté %d images vides.", count);
 }

@@ -4,6 +4,10 @@ build/
 *.a
 *.so
 
+# envs
+env/
+venv/
+
 # Executables
 sudoku_solver
 train_cnn
@@ -14,9 +18,13 @@ data/mnist/*.gz
 data/mnist/*-ubyte
 data/test_images/*.jpg
 data/test_images/*.png
+data/digital_*.bin
+data/digital_digits_dataset/*.png
 
 # Debug outputs
 debug_*.png
+output_*.png
+output.png
 
 # IDE
 .vscode/

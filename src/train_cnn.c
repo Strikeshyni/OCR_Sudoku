@@ -50,7 +50,21 @@ int main(int argc, char **argv) {
         return 1;
     }
     
-    LOG_INFO("\nDataset chargé:");
+    // Charger les données supplémentaires (Digital Digits)
+    LOG_INFO("Recherche de données supplémentaires...");
+    load_extra_dataset("data/digital_train.bin", train_data);
+    load_extra_dataset("data/digital_test.bin", test_data);
+    
+    // Générer des échantillons vides (classe 0) pour remplacer les 0 filtrés
+    // On vise environ 10% du dataset total pour que le modèle apprenne bien la classe "vide"
+    LOG_INFO("Génération de la classe 'Vide' (0)...");
+    int train_empty_count = train_data->count / 9; 
+    int test_empty_count = test_data->count / 9;
+    
+    generate_empty_samples(train_data, train_empty_count);
+    generate_empty_samples(test_data, test_empty_count);
+    
+    LOG_INFO("\nDataset chargé (avec classe Vide générée):");
     LOG_INFO("  - Entraînement: %zu images", train_data->count);
     LOG_INFO("  - Test: %zu images\n", test_data->count);
     

@@ -240,23 +240,38 @@ int main(int argc, char *argv[]) {
     threshold_otsu(binary);
     invert_image(binary); // Make lines white on black
     
-    // Dilate to connect broken lines
-    dilate(binary, 3);
-    save_gray_image("debug_3_binary.png", binary);
+    // Create a dilated copy for grid detection (connects broken lines)
+    GrayImage *binary_dilated = gray_image_clone(binary);
+    dilate(binary_dilated, 3);
+    save_gray_image("debug_3_binary.png", binary_dilated);
 
     // 2. Grid Detection
     printf("Detecting grid...\n");
     Quad grid_quad;
-    if (!find_largest_quad(binary, &grid_quad)) {
+    // Use binary_dilated for detection as it connects lines better
+    if (!find_largest_quad(binary_dilated, &grid_quad)) {
         fprintf(stderr, "Failed to detect grid\n");
         // Cleanup
         return 1;
     }
     printf("Grid detected!\n");
+    
+    // Free dilated image, we don't need it anymore
+    free(binary_dilated->data);
+    free(binary_dilated);
 
-    // Debug: Draw detected grid
-    RGBImage *debug_grid = rgb_image_create(original->width, original->height, original->channels);
-    memcpy(debug_grid->data, original->data, original->width * original->height * original->channels);
+    // Debug: Draw detected grid on BINARY image (converted to RGB)
+    // We want to see the grid on the image we actually used (or close to it)
+    // But user asked to use binary for everything.
+    // Let's visualize on the binary image to be consistent.
+    RGBImage *debug_grid = rgb_image_create(binary->width, binary->height, 3);
+    for(int i=0; i<binary->width*binary->height; i++) {
+        uint8_t val = binary->data[i];
+        debug_grid->data[i*3] = val;
+        debug_grid->data[i*3+1] = val;
+        debug_grid->data[i*3+2] = val;
+    }
+    
     for (int i = 0; i < 4; i++) {
         draw_line_rgb(debug_grid, grid_quad.corners[i], grid_quad.corners[(i+1)%4], 0, 255, 0, 3);
     }
@@ -275,16 +290,9 @@ int main(int argc, char *argv[]) {
     dst_quad.corners[3] = (Point2D){0, size};
     
     HomographyMatrix H = compute_homography(&grid_quad, &dst_quad);
-    GrayImage *rectified = warp_perspective(gray, &H, size, size);
+    // Use the binary image for warping to get clean, thresholded cells
+    GrayImage *rectified = warp_perspective(binary, &H, size, size);
     save_gray_image("debug_5_rectified.png", rectified);
-    
-    // Also rectify binary for cell extraction if needed, but gray is better for CNN
-    // Actually CNN needs normalized grayscale.
-    // Let's use the rectified grayscale.
-    
-    // Binarize rectified for better cell cleaning?
-    // No, clean_cell just crops.
-    // But we might want to threshold the cells individually.
     
     // 4. Cell Extraction
     printf("Extracting cells...\n");
@@ -319,8 +327,8 @@ int main(int argc, char *argv[]) {
         int c = i % 9;
         
         if (cells[i]) {
-            // Invert the cell for CNN
-            invert_image(cells[i]);
+            // Cells are already inverted (white on black) because we warped the inverted binary image.
+            // So we DO NOT invert them again.
             
             // Remove border noise (keep only largest component)
             remove_border_noise(cells[i]);
@@ -356,14 +364,22 @@ int main(int argc, char *argv[]) {
     CellCandidates cell_candidates[81];
     CellConfidence cell_confidences[81];
     
+    printf("\n=== Raw Predictions ===\n");
+    printf("Row | Col | Empty? | Top 1 (Prob)| Top 2 (Prob)| Top 3 (Prob)\n");
+    printf("----|-----|--------|-------------|-------------|-------------\n");
+
     for (int i = 0; i < 81; i++) {
         cell_candidates[i].count = 0;
         cell_confidences[i].index = i;
         cell_confidences[i].max_prob = 0.0f;
         
+        int r = i / 9;
+        int c = i % 9;
+        
         if (is_cell_empty(cells[i])) {
             // Empty cell
             cell_candidates[i].count = 0; 
+            printf("  %d |  %d  |  YES   |      -      |      -      |      -\n", r, c);
         } else {
             // Get probabilities
             float *input = prepare_cell_for_cnn(cells[i]);
@@ -388,12 +404,20 @@ int main(int argc, char *argv[]) {
             
             // Sort candidates by probability (descending)
             qsort(cell_candidates[i].candidates, cell_candidates[i].count, sizeof(Candidate), compare_candidates);
+            
+            // Print top 3 predictions
+            printf("  %d |  %d  |   NO   |  %d (%5.1f%%) |  %d (%5.1f%%) |  %d (%5.1f%%)\n", 
+                   r, c,
+                   cell_candidates[i].candidates[0].digit, cell_candidates[i].candidates[0].prob * 100,
+                   cell_candidates[i].candidates[1].digit, cell_candidates[i].candidates[1].prob * 100,
+                   cell_candidates[i].candidates[2].digit, cell_candidates[i].candidates[2].prob * 100);
         }
         
         // Free cell image
         free(cells[i]->data);
         free(cells[i]);
     }
+    printf("=======================\n\n");
     
     // Sort cells by confidence (process most confident first)
     qsort(cell_confidences, 81, sizeof(CellConfidence), compare_cell_confidence);
